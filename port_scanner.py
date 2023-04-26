@@ -26,7 +26,6 @@ def masscan_scan(target, ports, rate, protocol, interface=None):
     open_ports = []
     for line in output.split("\n"):
         if protocol in line and "Discovered" in line:
-            #print(line.split(" ")[3])
             try:
                 open_ports.append(line.split(" ")[3])
             except ValueError:
@@ -47,15 +46,12 @@ def nmap_scan(target, tcp_ports, udp_ports):
     nm = nmap.PortScanner()
 
     if tcp_ports:
-        # Extrai os números das strings e junta-os em uma string separada por vírgulas
         tcp_ports_str = ','.join([port.split('/')[0] for port in tcp_ports])
         nm.scan(hosts=target, ports=tcp_ports_str, arguments='-sV -A --script=default')
     if udp_ports:
-        # Extrai os números das strings e junta-os em uma string separada por vírgulas
         udp_ports_str = ','.join([port.split('/')[0] for port in udp_ports])
         nm.scan(hosts=target, ports=udp_ports_str, arguments='-sU -sV --script=default')
 
-    # Verifica se o host está presente nos resultados da varredura antes de retornar os dados
     if target in nm.all_hosts():
         return nm[target]
     else:
@@ -93,9 +89,10 @@ def main():
     """    
     parser = argparse.ArgumentParser(description="A Python tool to scan open TCP and UDP ports using masscan and perform Nmap service/version scanning")
     parser.add_argument("target", help="Target IP address or range (CIDR notation)")
-    parser.add_argument("-p", "--ports", default="1-65535", help="Port range to scan (default: 1-65535 TCP/UDP)")
-    parser.add_argument("-r", "--rate", default="1000", help="Scan rate for masscan (default: 1000)")
-    parser.add_argument("-i", "--interface", default="tun0", help="Select the network adapter card (default: tun0)")
+    parser.add_argument("--ports", default="1-65535", help="Port range to scan (default: 1-65535 TCP/UDP)")
+    parser.add_argument("--rate", default="1000", help="Scan rate for masscan (default: 1000)")
+    parser.add_argument("--interface", default="tun0", help="Select the network adapter card (default: tun0)")
+    parser.add_argument("--udp", action="store_true", help="Enable UDP port scanning (default: disabled)")
     args = parser.parse_args()
 
     if not os.geteuid() == 0:
@@ -105,11 +102,17 @@ def main():
     open_tcp_ports = masscan_scan(args.target, args.ports, args.rate, "tcp", args.interface)
     if open_tcp_ports:
         print(f"Found open TCP ports: {', '.join(map(str, open_tcp_ports))}")
+    else:
+        print(colored_text("[!] ", 'red') + "\033[1m" + "No TCP open ports found." + "\033[0m")
 
-    print(colored_text("[*] ", 'green') + "\033[1m" + f"Scanning open UDP ports on {args.target}..." + "\033[0m")
-    open_udp_ports = masscan_scan(args.target, args.ports, args.rate, "udp", args.interface)
-    if open_udp_ports:
-        print(f"Found open UDP ports: {', '.join(map(str, open_udp_ports))}")
+    if args.udp:
+        print(colored_text("[*] ", 'green') + "\033[1m" + f"Scanning open UDP ports on {args.target}..." + "\033[0m")
+        open_udp_ports = masscan_scan(args.target, args.ports, args.rate, "udp", args.interface)
+        if open_udp_ports:
+            print(f"Found open UDP ports: {', '.join(map(str, open_udp_ports))}")
+    else:
+        print(colored_text("[!] ", 'red') + "\033[1m" + "No UDP ports found or scanned." + "\033[0m")
+        open_udp_ports = []
 
     print(colored_text("[!] ", 'green') + "\033[1m" + f"Running Nmap service and version scanning on {args.target}..." + "\033[0m")
     nmap_result = nmap_scan(args.target, open_tcp_ports, open_udp_ports)
@@ -122,8 +125,6 @@ def main():
     if open_udp_ports:
         for port in nmap_result['udp']:
             print(f"UDP Port {port}: " + "\033[1m" + f"{nmap_result['udp'][port]['name']} ({nmap_result['udp'][port]['product']}, {nmap_result['udp'][port]['version']})" + "\033[0m")
-    else:
-        print(colored_text("[!] ", 'red') + "\033[1m" + "No UDP open ports found." + "\033[0m")
 
 if __name__ == "__main__":
     main()
